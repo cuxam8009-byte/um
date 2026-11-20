@@ -1,0 +1,3 @@
+# Tệp đã gỡ ở v0.0.2 (build.sh xóa chúng rồi tự xóa danh sách này)
+core/src/blocklist.rs
+app/src/main/java/dev/dymith/browser/GlassBackdrop.kt

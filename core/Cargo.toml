@@ -1,0 +1,13 @@
+[package]
+name = "dymith-core"
+version = "0.0.2"
+edition = "2021"
+description = "Lõi Rust của Dymith Browser (Phase 0)"
+publish = false
+
+[lib]
+name = "dymith_core"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+jni = "=0.21.1"
