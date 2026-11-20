@@ -1,0 +1,91 @@
+# Dymith: workflow "stub". File này ổn định, chỉ cần dán một lần.
+# Mọi logic build nằm trong ci/build.sh (đi kèm file zip), nên sau này cập nhật chỉ cần upload zip mới.
+name: Dymith build
+
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dymith-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Lấy mã nguồn
+        run: |
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" .
+          git checkout "${GITHUB_REF_NAME}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Giải nén file zip đã upload
+        run: |
+          shopt -s nullglob
+          zips=( ./*.zip )
+          if [ "${#zips[@]}" -eq 0 ]; then
+            echo "Không có file zip ở thư mục gốc, dùng mã nguồn hiện có."
+          else
+            for z in "${zips[@]}"; do
+              echo "Giải nén $z"
+              tmp="$(mktemp -d)"
+              unzip -q -o "$z" -d "$tmp"
+              rm -rf "$tmp/.github"
+              cp -a "$tmp"/. ./
+              git rm -q -f -- "$z"
+              rm -rf "$tmp"
+            done
+            git add -A
+            git commit -q -m "ci: giải nén zip đã upload" || true
+            git pull --rebase -q origin "${GITHUB_REF_NAME}" || true
+            git push -q origin "HEAD:${GITHUB_REF_NAME}"
+          fi
+
+      - name: Dựng APK
+        run: |
+          mkdir -p logs out
+          if [ -f ci/build.sh ]; then
+            bash ci/build.sh 2>&1 | tee logs/ci.log
+          else
+            echo "Chưa có mã nguồn: hãy upload dymith-phase0.zip vào thư mục gốc của repo." | tee logs/ci.log
+          fi
+
+      - name: Tóm tắt kết quả
+        if: always()
+        run: |
+          {
+            echo "## Dymith build #${GITHUB_RUN_NUMBER}"
+            if [ -f out/report.md ]; then
+              cat out/report.md
+            fi
+            echo
+            echo "### Nhật ký (150 dòng cuối). Nếu build lỗi, hãy sao chép khối này gửi cho Claude."
+            echo '```'
+            if [ -f logs/ci.log ]; then tail -n 150 logs/ci.log; fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Lưu artifact (APK và nhật ký)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dymith-build-${{ github.run_number }}
+          path: |
+            out/*.apk
+            out/report.md
+            logs/*.log
+            logs/*.txt
+          if-no-files-found: ignore
+          retention-days: 14
